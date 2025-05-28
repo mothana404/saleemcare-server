@@ -1,0 +1,211 @@
+// Improved schema with unified approach and better chat model
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  ADMIN
+  DOCTOR
+  PATIENT
+  VISITOR  // Add visitor as a role
+}
+
+enum AccountType {
+  REGISTERED    // Has email/password
+  ANONYMOUS     // Device-based only
+}
+
+enum DiagnosisStatus {
+  PENDING   
+  REVIEWED  
+  CONFIRMED 
+  REJECTED  
+}
+
+enum Gender {
+  MALE
+  FEMALE
+  OTHER
+  PREFER_NOT_TO_SAY
+}
+
+enum MessageType {
+  USER
+  AI
+  SYSTEM
+}
+
+// Unified User model for both registered and anonymous users
+model User {
+  id            String          @id @default(uuid())
+  
+  // Account type determines if this is registered or anonymous
+  accountType   AccountType     @default(ANONYMOUS)
+  
+  // Required for registered users, null for anonymous
+  userName      String?         @unique
+  email         String?         @unique
+  password      String?
+  
+  // Required for all users (registered and anonymous)
+  deviceId      String          @unique // Make required for device tracking
+  role          UserRole        @default(VISITOR)
+  fcmToken      String         
+  isActive      Boolean         @default(true)
+  
+  // Anonymous user specific fields
+  lastSeen      DateTime        @default(now())
+  visitCount    Int             @default(1)
+  
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+  
+  // Relations - unified for all user types
+  notifications     Notification[]
+  patientInfo       PatientInfo?   
+  doctorInfo        DoctorInfo?    
+  chatMessages      ChatMessage[]  
+  chatSessions      ChatSession[]
+  sentAIRequests    AIRequest[]    @relation("UserRequestSender")
+  receivedAIData    AIRequest[]    @relation("UserDataReceiver")
+
+  @@index([email])
+  @@index([role])
+  @@index([deviceId])
+  @@index([accountType])
+}
+
+// Chat session to group related messages
+model ChatSession {
+  id            String        @id @default(uuid())
+  userId        String
+  title         String?       // Optional title for the chat session
+  isActive      Boolean       @default(true)
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+  
+  // Relations
+  user          User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  messages      ChatMessage[]
+
+  @@index([userId])
+  @@index([isActive])
+  @@index([createdAt])
+}
+
+// Individual chat messages
+model ChatMessage {
+  id            String        @id @default(uuid())
+  sessionId     String
+  userId        String
+  type          MessageType   // USER, AI, or SYSTEM
+  content       String        @db.Text
+  metadata      Json?         // For storing additional data like tokens, model used, etc.
+  isDelivered   Boolean       @default(false)
+  isRead        Boolean       @default(false)
+  createdAt     DateTime      @default(now())
+  
+  // Relations
+  session       ChatSession   @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  user          User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId])
+  @@index([userId])
+  @@index([type])
+  @@index([createdAt])
+}
+
+// Unified AI Request model
+model AIRequest {
+  id              String   @id @default(uuid())
+  senderId        String   
+  receiverId      String?  
+  
+  dataOne         String
+  dataTwo         String
+  dataThree       String
+  promptText      String   @db.Text
+  aiResponse      String   @db.Text
+  isProcessed     Boolean  @default(false)
+  isDelivered     Boolean  @default(false)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  // Relations
+  sender          User     @relation("UserRequestSender", fields: [senderId], references: [id])
+  receiver        User?    @relation("UserDataReceiver", fields: [receiverId], references: [id])
+
+  @@index([senderId])
+  @@index([receiverId])
+  @@index([isProcessed])
+  @@index([isDelivered])
+}
+
+// Unified Patient info for all user types
+model PatientInfo {
+  id              String    @id @default(uuid())
+  userId          String    @unique  
+  dateOfBirth     DateTime
+  gender          Gender
+  phoneNumber     String
+  address         String
+  medicalHistory  String
+  
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  
+  // Relation
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model DoctorInfo {
+  id              String    @id @default(uuid())
+  userId          String    @unique  
+  fullName        String
+  specialization  String
+  licenseNumber   String    @unique
+  phoneNumber     String
+  address         String
+  experience      Int       
+  bio             String?   
+  consultationFee Decimal?  
+  isVerified      Boolean   @default(false)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  
+  // Relation
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([specialization])
+  @@index([isVerified])
+}
+
+// Unified notifications
+model Notification {
+  id          String    @id @default(uuid())
+  userId      String
+  title       String
+  message     String    @db.Text
+  type        String?   
+  data        Json?     
+  isRead      Boolean   @default(false)
+  createdAt   DateTime  @default(now())
+  
+  // Relation
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([isRead])
+  @@index([createdAt])
+  @@index([type])
+}
