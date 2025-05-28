@@ -12,7 +12,7 @@ const { failedResponse } = require("./src/utils/response");
 const app = express();
 const server = http.createServer(app);
 
-connectDatabase();
+// connectDatabase();
 
 app.use(helmet());
 app.use(cors({ origin: "*", credentials: true }));

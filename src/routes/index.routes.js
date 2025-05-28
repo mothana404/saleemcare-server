@@ -7,7 +7,7 @@ const router = express.Router();
 router.use('/patient/auth', patientAuthRoutes);
 
 // Test endpoint for AI chat
-router.post('/test', async (req, res) => {
+router.get('/test', async (req, res) => {
     try {
         // const { message } = req.body;
         // if (!message) {
